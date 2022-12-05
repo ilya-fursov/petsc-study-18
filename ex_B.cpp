@@ -80,8 +80,13 @@ int main(int argc,char **argv)
 	ierr = DMDAVecGetArray(da, act0, &arract); CHKERRQ(ierr);
 	for (int i = xs; i < xs+xm; i++)
 		for (int j = ys; j < ys+ym; j++)
-			if (((i-N/4)*(i-N/4) + (j-N/4)*(j-N/4))*80 <= N2)
+		{
+			if (((i-N/6)*(i-N/6) + (j-N/5)*(j-N/5))*80 <= N2)
 				arract[j][i] = 1;
+
+			if (((i-3*N/8)*(i-3*N/8) + (j-3*N/10)*(j-3*N/10))*90 <= N2)
+				arract[j][i] = 1;
+		}
 	ierr = DMDAVecRestoreArray(da, act0, &arract); CHKERRQ(ierr);
 	ierr = DMGlobalToLocalBegin(da, act0, INSERT_VALUES, act); CHKERRQ(ierr);
 	ierr = DMGlobalToLocalEnd(da, act0, INSERT_VALUES, act); CHKERRQ(ierr);
@@ -217,7 +222,7 @@ int main(int argc,char **argv)
 	ierr = VecDestroy(&act0); CHKERRQ(ierr);
 	ierr = MatDestroy(&A); CHKERRQ(ierr);
 	ierr = PetscViewerDestroy(&vtk); CHKERRQ(ierr);
-	ierr = PetscLogStagePop(); CHKERRQ(ierr);
+	//ierr = PetscLogStagePop(); CHKERRQ(ierr);
 
 
 	// ------------------------ ADVECTION -----------------------
@@ -242,7 +247,7 @@ int main(int argc,char **argv)
 	for (int i = xs; i < xs+xm; i++)			// fill the matrix and initial y
 		for (int j = ys; j < ys+ym; j++)
 		{
-			if (((i-N/2)*(i-N/2) + (j-N/2)*(j-N/2))*20 <= N2)				// initial y
+			if (((i-N/2)*(i-N/2) + (j-N/2)*(j-N/2))*100 <= N2)				// initial y
 				yarr[j][i] = 1;
 			else
 				yarr[j][i] = 0;
@@ -272,6 +277,8 @@ int main(int argc,char **argv)
 
 			if (i-1 >= 0 && arract[j][i] == 0 && arract[j][i-1] == 0)
 				p1 = array[j][i] - array[j][i-1];
+			else
+				col[0].i = -1;
 
 			if (j+1 < N && arract[j][i] == 0 && arract[j+1][i] == 0)
 				p2 = array[j][i] - array[j+1][i];
@@ -280,6 +287,8 @@ int main(int argc,char **argv)
 
 			if (j-1 >= 0 && arract[j][i] == 0 && arract[j-1][i] == 0)
 				p3 = array[j][i] - array[j-1][i];
+			else
+				col[1].j = -1;
 
 			if (p0 > 0)
 				val[2] += p0;
