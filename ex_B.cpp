@@ -247,7 +247,7 @@ int main(int argc,char **argv)
 	for (int i = xs; i < xs+xm; i++)			// fill the matrix and initial y
 		for (int j = ys; j < ys+ym; j++)
 		{
-			if (((i-N/2)*(i-N/2) + (j-N/2)*(j-N/2))*100 <= N2)				// initial y
+			if (((i-N/2)*(i-N/2) + (j-N/2)*(j-N/2))*400 <= N2)				// initial y
 				yarr[j][i] = 1;
 			else
 				yarr[j][i] = 0;
@@ -310,7 +310,15 @@ int main(int argc,char **argv)
 			else
 				val[1] = p3;
 
-			ierr  = MatSetValuesStencil(B, 1, &row, 5, col, val, INSERT_VALUES); CHKERRQ(ierr);
+			if (i == N/2 && j == N/2)
+			{
+				val[0] = h2/dt;
+				ierr  = MatSetValuesStencil(B, 1, &row, 1, &row, val, INSERT_VALUES); CHKERRQ(ierr);	// for boundary value
+			}
+			else
+			{
+				ierr  = MatSetValuesStencil(B, 1, &row, 5, col, val, INSERT_VALUES); CHKERRQ(ierr);		// normal stuff
+			}
 		}
 
 	ierr = MatAssemblyBegin(B, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
