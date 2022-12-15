@@ -21,7 +21,8 @@ static char help[] = "Sim version 1. Simple, structured, linear. Options:\n" \
 					"-uw\n" \
 					"-rw\n" \
 					"-Q0\n" \
-					"-Pinit\n";
+					"-Pinit" \
+					"-savearr\n";
 
 const int BUFFSIZE = 500;
 
@@ -39,6 +40,7 @@ struct AppCtx
   PetscScalar cf, cw;		// compressibilities
   PetscScalar poro, uw, rw;	// porosity, water visc., well radius
   PetscScalar Q0, Pinit;	// well rate, initial pressure
+  PetscBool savearr;		// save pressure grids?
 
   Vec uloc1;				// work vector (local)
   Vec perm;					// global vec for permeability
@@ -50,7 +52,7 @@ struct AppCtx
   AppCtx() : comm(MPI_COMM_NULL), da(NULL), Ni(100), Nj(100), Lx(1000), Ly(1000), Lz(10), Tmax(60), dt0(1),
 		  	 dx(0), dy(0), dz(0), PV0(0),
 		     k1(15), k2(50), k3(150), k4(45), cf(6e-5), cw(5e-5),
-		     poro(0.2), uw(0.5), rw(0.1), Q0(100), Pinit(200), uloc1(NULL),
+		     poro(0.2), uw(0.5), rw(0.1), Q0(100), Pinit(200), savearr(PETSC_TRUE), uloc1(NULL),
 		     perm(NULL), Tx(NULL), Ty(NULL) {};
 
   PetscErrorCode SetOptions();
@@ -85,8 +87,8 @@ int main(int argc, char **argv)
 	Vec       u;                    // approximate solution vector
 
 	ctx.comm = PETSC_COMM_WORLD;
-	PetscCall(ctx.SetOptions());
-	PetscCall(ctx.CreateObjects());
+	PetscCallBack("SetOptions", ctx.SetOptions());
+	PetscCallBack("CreateObjects", ctx.CreateObjects());
 	PetscCallBack("SaveVecVtk", SaveVecVtk(ctx.perm, "sim1_outk.vts", &ctx));
 	PetscCall(DMCreateGlobalVector(ctx.da, &u));			// current solution
 
@@ -115,7 +117,7 @@ int main(int argc, char **argv)
 	PetscCall(TSDestroy(&ts));
 	PetscCall(VecDestroy(&u));
 	PetscCall(MatDestroy(&A));
-	PetscCall(ctx.DestroyObjects());
+	PetscCallBack("DestroyObjects", ctx.DestroyObjects());
 
 	PetscCall(PetscFinalize());
 	return 0;
@@ -147,6 +149,8 @@ PetscErrorCode AppCtx::SetOptions()
 	PetscCall(PetscOptionsGetScalar(NULL,NULL,"-Q0",&Q0,NULL));
 	PetscCall(PetscOptionsGetScalar(NULL,NULL,"-Pinit",&Pinit,NULL));
 
+	PetscCall(PetscOptionsHasName(NULL,NULL, "-savearr", &savearr));
+
 	dx = Lx/Ni;
 	dy = Ly/Nj;
 	dz = Lz;
@@ -161,7 +165,7 @@ PetscErrorCode AppCtx::CreateObjects()
 
 	PetscCall(DMDACreate2d(comm, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DMDA_STENCIL_STAR, Ni, Nj, PETSC_DECIDE, PETSC_DECIDE, 1, 1, 0, 0, &da));
 	PetscCall(DMSetUp(da));
-	PetscCall(DMDASetUniformCoordinates(da, 0.0, Lx, 0.0, Ly, 0.0, 0.0));
+	PetscCall(DMDASetUniformCoordinates(da, dx/2, Lx-dx/2, dy/2, Ly-dy/2, 0.0, 0.0));
 	PetscCall(DMCreateLocalVector(da, &uloc1));		// assembly in, local
 
 	PetscCall(DMCreateGlobalVector(da, &perm));		// global vec for permeability
@@ -237,7 +241,7 @@ PetscErrorCode AppCtx::DestroyObjects()
 	FILE *F;
 	PetscCall(PetscFOpen(comm, "Sim1_BHPout.txt", "w", &F));
 	for (size_t i = 0; i < wbhp.size(); i += 3)
-		PetscCall(PetscFPrintf(comm, F, "%g\t%g\t%g\n", wbhp[i], wbhp[i+1], wbhp[i+2]));
+		PetscCall(PetscFPrintf(comm, F, "%g\t%-20.16g\t%-20.16g\n", wbhp[i], wbhp[i+1], wbhp[i+2]));
 	PetscCall(PetscFClose(comm, F));
 
 	PetscFunctionReturn(0);
@@ -546,14 +550,17 @@ PetscErrorCode monitor(TS ts, PetscInt step, PetscReal time, Vec u, void *mctx)
 	Ctx->wbhp.push_back(bhp[0]);
 	Ctx->wbhp.push_back(bhp[1]);
 
-	// save the pressure grid to vtk
-	char buff[BUFFSIZE];
-	PetscCall(PetscSNPrintf(buff, BUFFSIZE, "sim1_outP_%d.vts", step));
-	PetscCallBack("SaveVecVtk", SaveVecVtk(u, buff, Ctx));
+	if (Ctx->savearr)
+	{
+		// save the pressure grid to vtk
+		char buff[BUFFSIZE];
+		PetscCall(PetscSNPrintf(buff, BUFFSIZE, "sim1_outP_%d.vts", step));
+		PetscCallBack("SaveVecVtk", SaveVecVtk(u, buff, Ctx));
 
-	// save the pressure grid to ascii
-	PetscCall(PetscSNPrintf(buff, BUFFSIZE, "sim1_asciiP_%d.txt", step));
-	PetscCallBack("SaveVecAscii", SaveVecAscii(u, buff, Ctx));
+		// save the pressure grid to ascii
+		PetscCall(PetscSNPrintf(buff, BUFFSIZE, "sim1_asciiP_%d.txt", step));
+		PetscCallBack("SaveVecAscii", SaveVecAscii(u, buff, Ctx));
+	}
 
 	PetscFunctionReturn(0);
 }
